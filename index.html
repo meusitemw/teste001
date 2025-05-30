@@ -544,6 +544,58 @@
       display: none;
     }
     
+    .parcelas-container {
+      margin-top: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 15px;
+      background-color: #f9f9f9;
+    }
+    
+    .parcela-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .parcela-item label {
+      min-width: 80px;
+      margin-bottom: 0;
+    }
+    
+    .parcela-item input {
+      flex: 1;
+    }
+    
+    .parcela-item select {
+      width: 120px;
+    }
+    
+    .add-parcela {
+      margin-top: 10px;
+    }
+    
+    .download-disabled {
+      opacity: 0.5;
+      pointer-events: none;
+      position: relative;
+    }
+    
+    .download-disabled::after {
+      content: "Disponível a partir de 50 cadastros";
+      position: absolute;
+      top: -30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--dark-gray);
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    
     @media (max-width: 768px) {
       .form-grid {
         grid-template-columns: 1fr;
@@ -601,6 +653,15 @@
       .modal-content {
         width: 95%;
         padding: 15px;
+      }
+      
+      .parcela-item {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      
+      .parcela-item label {
+        min-width: auto;
       }
     }
   </style>
@@ -700,23 +761,13 @@
         </div>
         
         <div class="form-group">
-          <label for="parcelas">Quantidade de Parcelas:</label>
-          <input id="parcelas" type="number" name="parcelas" min="0" onchange="calcularTotal()">
-        </div>
-        
-        <div class="form-group">
-          <label for="valorParcela">Valor Parcela (R$):</label>
-          <input id="valorParcela" type="number" name="valorParcela" step="0.01" min="0" onchange="calcularTotal()">
+          <label for="total">Total (R$):</label>
+          <input id="total" type="number" name="total" step="0.01" min="0" readonly>
         </div>
         
         <div class="form-group">
           <label for="primeiraParcela">Vencimento 1ª Parcela:</label>
           <input id="primeiraParcela" type="date" name="primeiraParcela">
-        </div>
-        
-        <div class="form-group">
-          <label for="total">Total (R$):</label>
-          <input id="total" type="number" name="total" step="0.01" min="0" readonly>
         </div>
         
         <div class="form-group">
@@ -728,6 +779,17 @@
           <label for="assinatura">Assinatura:</label>
           <input id="assinatura" name="assinatura">
         </div>
+      </div>
+      
+      <!-- Seção de Parcelas -->
+      <div class="parcelas-container">
+        <h3>Parcelas</h3>
+        <div id="listaParcelasForm">
+          <!-- As parcelas serão adicionadas dinamicamente aqui -->
+        </div>
+        <button type="button" onclick="adicionarParcela()" class="btn-info add-parcela">
+          <i class="fas fa-plus"></i> Adicionar Parcela
+        </button>
       </div>
       
       <div class="btn-group">
@@ -811,10 +873,14 @@
         <i class="fas fa-upload"></i> Carregar Banco de Dados
         <input type="file" id="uploadExcel" accept=".xlsx" style="display: none;" onchange="carregarArquivoExcel(this)">
       </label>
+      
+      <button onclick="gerarPDF()" id="btnGerarPDF" class="${bancoDados.clientes.length < 50 ? 'download-disabled' : ''}">
+        <i class="fas fa-file-pdf"></i> Gerar PDF
+      </button>
     </div>
     
     <p style="text-align: center; margin-top: 15px; color: #666;">
-      O sistema salva automaticamente em Excel e gera PDF ao atingir 50 cadastros
+      O PDF estará disponível para download a partir de 50 cadastros
     </p>
   </div>
 </div>
@@ -930,6 +996,7 @@
   const tabela = document.querySelector('#tabelaClientes tbody');
   const detalhes = document.getElementById('detalhesCliente');
   const listaParcelas = document.getElementById('listaParcelas');
+  const listaParcelasForm = document.getElementById('listaParcelasForm');
   const clienteSelecionado = document.getElementById('clienteSelecionado');
   const toast = document.getElementById('toast');
   const toastMessage = document.getElementById('toast-message');
@@ -937,6 +1004,7 @@
   const listaCompras = document.getElementById('listaCompras');
   const listaExames = document.getElementById('listaExames');
   const modalExame = document.getElementById('modalExame');
+  const btnGerarPDF = document.getElementById('btnGerarPDF');
   
   // Variáveis
   let clienteIndexAtual = null;
@@ -945,19 +1013,24 @@
     exames: []
   };
   let exameEditando = null;
-  let pdfGerado = false; // Controla se o PDF já foi gerado para os 50 cadastros
 
   // Carregar dados iniciais do localStorage
   function carregarDadosIniciais() {
     const dadosSalvos = localStorage.getItem('bancoDadosOtica');
     if (dadosSalvos) {
       bancoDados = JSON.parse(dadosSalvos);
-      
-      // Verificar se precisa gerar PDF ao carregar (se já tem 50+ e ainda não gerou)
-      if (bancoDados.clientes.length >= 50 && !pdfGerado) {
-        gerarPDFAutomatico();
-        pdfGerado = true;
-      }
+    }
+    atualizarBotaoPDF();
+  }
+
+  // Atualizar estado do botão de gerar PDF
+  function atualizarBotaoPDF() {
+    if (bancoDados.clientes.length >= 50) {
+      btnGerarPDF.classList.remove('download-disabled');
+      btnGerarPDF.onclick = gerarPDF;
+    } else {
+      btnGerarPDF.classList.add('download-disabled');
+      btnGerarPDF.onclick = null;
     }
   }
 
@@ -983,16 +1056,16 @@
     // Forçar download do arquivo
     saveAs(new Blob([wbout], { type: "application/octet-stream" }), "BancoDadosOtica.xlsx");
     
-    // Verificar se atingiu 50 cadastros e gerar PDF (se ainda não foi gerado)
-    if (bancoDados.clientes.length >= 50 && !pdfGerado) {
-      gerarPDFAutomatico();
-      pdfGerado = true;
-    }
+    mostrarToast('Banco de dados salvo com sucesso!', 'success');
+    atualizarBotaoPDF();
   }
 
-  // Gerar PDF automaticamente quando atingir 50 cadastros
-  function gerarPDFAutomatico() {
-    if (bancoDados.clientes.length < 50) return;
+  // Gerar PDF manualmente
+  function gerarPDF() {
+    if (bancoDados.clientes.length < 50) {
+      mostrarToast('O PDF está disponível apenas a partir de 50 cadastros', 'error');
+      return;
+    }
     
     // Cria um novo documento PDF
     const doc = new jsPDF();
@@ -1005,8 +1078,8 @@
     // Adiciona data e informação de gerado automaticamente
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Gerado automaticamente em: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
-    doc.text(`(Gerado ao atingir ${bancoDados.clientes.length} cadastros)`, 105, 28, { align: 'center' });
+    doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
+    doc.text(`Total de clientes: ${bancoDados.clientes.length}`, 105, 28, { align: 'center' });
     
     // Adiciona linha
     doc.setDrawColor(0, 102, 204);
@@ -1055,7 +1128,7 @@
     const dataAtual = new Date().toISOString().split('T')[0];
     doc.save(`Clientes_OticaPrismax_${dataAtual}.pdf`);
     
-    mostrarToast(`Relatório PDF gerado automaticamente (${bancoDados.clientes.length} cadastros)`, 'success');
+    mostrarToast(`Relatório PDF gerado com sucesso!`, 'success');
   }
 
   // Inicialização
@@ -1092,6 +1165,41 @@
     document.getElementById(abaId).classList.add('active');
   }
 
+  // Adicionar nova parcela ao formulário
+  function adicionarParcela(valor, dataVencimento, status) {
+    const numParcelas = listaParcelasForm.querySelectorAll('.parcela-item').length + 1;
+    const parcelaDiv = document.createElement('div');
+    parcelaDiv.className = 'parcela-item';
+    
+    parcelaDiv.innerHTML = `
+      <label>Parcela ${numParcelas}:</label>
+      <input type="number" placeholder="Valor" step="0.01" min="0" 
+             value="${valor || ''}" onchange="calcularTotal()">
+      <input type="date" placeholder="Vencimento" value="${dataVencimento || ''}">
+      <select>
+        <option value="Em aberto" ${(!status || status === 'Em aberto') ? 'selected' : ''}>Em aberto</option>
+        <option value="Paga" ${status === 'Paga' ? 'selected' : ''}>Paga</option>
+      </select>
+      <button type="button" onclick="removerParcela(this)" class="btn-danger" style="padding: 8px;">
+        <i class="fas fa-trash"></i>
+      </button>
+    `;
+    
+    listaParcelasForm.appendChild(parcelaDiv);
+    calcularTotal();
+  }
+
+  // Remover parcela do formulário
+  function removerParcela(btn) {
+    btn.parentElement.remove();
+    // Renumerar as parcelas restantes
+    const parcelas = listaParcelasForm.querySelectorAll('.parcela-item');
+    parcelas.forEach((parcela, index) => {
+      parcela.querySelector('label').textContent = `Parcela ${index + 1}:`;
+    });
+    calcularTotal();
+  }
+
   // Evento de submit do formulário
   form.addEventListener('submit', function(e) {
     e.preventDefault();
@@ -1109,24 +1217,27 @@
       return;
     }
     
-    const qtdParcelas = parseInt(dados.parcelas) || 0;
-    const valorParcela = parseFloat(dados.valorParcela) || 0;
-    const primeiraParcela = dados.primeiraParcela ? new Date(dados.primeiraParcela) : new Date();
-
-    // Criar array de parcelas
+    // Processar parcelas
     dados.parcelasDetalhes = [];
-    for (let i = 1; i <= qtdParcelas; i++) {
-      const dataVencimento = new Date(primeiraParcela);
-      dataVencimento.setMonth(dataVencimento.getMonth() + (i - 1));
+    const parcelas = listaParcelasForm.querySelectorAll('.parcela-item');
+    
+    parcelas.forEach((parcela, index) => {
+      const inputs = parcela.querySelectorAll('input');
+      const select = parcela.querySelector('select');
       
       dados.parcelasDetalhes.push({
-        numero: i,
-        valor: valorParcela,
-        status: "Em aberto",
-        dataVencimento: dataVencimento.toISOString().split('T')[0],
-        dataPagamento: null
+        numero: index + 1,
+        valor: parseFloat(inputs[0].value) || 0,
+        dataVencimento: inputs[1].value || new Date().toISOString().split('T')[0],
+        status: select.value,
+        dataPagamento: select.value === 'Paga' ? new Date().toISOString().split('T')[0] : null
       });
-    }
+    });
+
+    // Calcular total baseado nas parcelas
+    const entrada = parseFloat(dados.entrada) || 0;
+    const totalParcelas = dados.parcelasDetalhes.reduce((sum, p) => sum + p.valor, 0);
+    dados.total = (entrada + totalParcelas).toFixed(2);
 
     // Adicionar cliente ao banco de dados
     bancoDados.clientes.push(dados);
@@ -1136,6 +1247,7 @@
     
     mostrarToast('Cliente salvo no banco de dados!', 'success');
     form.reset();
+    listaParcelasForm.innerHTML = ''; // Limpar parcelas
     carregarTabela();
     carregarCompras();
   });
@@ -1207,7 +1319,7 @@
         <div class="ficha-body">
           <p><strong>Total:</strong> R$ ${(parseFloat(cliente.total) || 0).toFixed(2)}</p>
           <p><strong>Entrada:</strong> R$ ${(parseFloat(cliente.entrada) || 0).toFixed(2)}</p>
-          <p><strong>Parcelas:</strong> ${cliente.parcelasDetalhes.length}x de R$ ${(parseFloat(cliente.valorParcela) || 0).toFixed(2)}</p>
+          <p><strong>Parcelas:</strong> ${cliente.parcelasDetalhes.length}x (Total: R$ ${totalParcelas.toFixed(2)})</p>
           <p><strong>Status:</strong> 
             <span class="status-${totalPendente === 0 ? 'paga' : 'aberta'}">
               ${totalPendente === 0 ? 'Quitado' : `${totalPago.toFixed(2)}/${totalParcelas.toFixed(2)}`}
@@ -1422,6 +1534,14 @@
       form.elements['notificarWhatsapp'].checked = cliente.notificarWhatsapp || false;
     }
     
+    // Limpar e recriar parcelas
+    listaParcelasForm.innerHTML = '';
+    if (cliente.parcelasDetalhes && cliente.parcelasDetalhes.length > 0) {
+      cliente.parcelasDetalhes.forEach(parcela => {
+        adicionarParcela(parcela.valor, parcela.dataVencimento, parcela.status);
+      });
+    }
+    
     bancoDados.clientes.splice(index, 1);
     salvarBancoDados();
     mostrarToast('Preencha os dados para edição', 'info');
@@ -1630,7 +1750,6 @@
         
         // Limpar dados atuais
         bancoDados = { clientes: [], exames: [] };
-        pdfGerado = false; // Resetar flag de PDF gerado
         
         // Processar planilha de clientes
         if (workbook.Sheets["Clientes"]) {
@@ -1645,16 +1764,11 @@
         // Salvar no localStorage
         localStorage.setItem('bancoDadosOtica', JSON.stringify(bancoDados));
         
-        // Verificar se precisa gerar PDF
-        if (bancoDados.clientes.length >= 50) {
-          gerarPDFAutomatico();
-          pdfGerado = true;
-        }
-        
         mostrarToast('Banco de dados importado com sucesso!', 'success');
         carregarTabela();
         carregarCompras();
         carregarExames();
+        atualizarBotaoPDF();
       } catch (error) {
         console.error("Erro ao processar arquivo Excel:", error);
         mostrarToast('Erro ao importar arquivo. Verifique o formato.', 'error');
@@ -1775,10 +1889,16 @@
   // Calcular total automaticamente
   function calcularTotal() {
     const entrada = parseFloat(document.getElementById('entrada').value) || 0;
-    const parcelas = parseInt(document.getElementById('parcelas').value) || 0;
-    const valorParcela = parseFloat(document.getElementById('valorParcela').value) || 0;
+    let totalParcelas = 0;
     
-    const total = entrada + (parcelas * valorParcela);
+    // Somar todas as parcelas
+    const parcelas = listaParcelasForm.querySelectorAll('.parcela-item');
+    parcelas.forEach(parcela => {
+      const valor = parseFloat(parcela.querySelector('input[type="number"]').value) || 0;
+      totalParcelas += valor;
+    });
+    
+    const total = entrada + totalParcelas;
     document.getElementById('total').value = total.toFixed(2);
   }
 </script>
