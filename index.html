@@ -595,6 +595,49 @@
       font-size: 12px;
       white-space: nowrap;
     }
+
+    /* Novos estilos adicionados */
+    .fa-spinner {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #dashboard {
+      text-align: center;
+    }
+
+    #dashboard .form-group {
+      background: var(--light-gray);
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    #dashboard h3 {
+      color: var(--primary-color);
+      margin-bottom: 10px;
+    }
+
+    #dashboard p {
+      margin: 5px 0;
+      font-size: 14px;
+    }
+
+    input:required, select:required {
+      border-left: 3px solid var(--primary-color);
+    }
+
+    input:invalid {
+      border-color: var(--danger-color);
+    }
+
+    .required-field::after {
+      content: " *";
+      color: var(--danger-color);
+    }
     
     @media (max-width: 768px) {
       .form-grid {
@@ -663,6 +706,10 @@
       .parcela-item label {
         min-width: auto;
       }
+
+      #dashboard .form-group {
+        margin-bottom: 15px;
+      }
     }
   </style>
 </head>
@@ -681,6 +728,27 @@
 <div class="container">
   <h1 class="main-title">Sistema de Clientes</h1>
 
+  <!-- Dashboard de Métricas -->
+  <div class="card">
+    <h2 class="main-title">Resumo Financeiro</h2>
+    <div class="form-grid" id="dashboard">
+      <div class="form-group">
+        <h3>Clientes</h3>
+        <p>Total: <span id="total-clientes">0</span></p>
+      </div>
+      <div class="form-group">
+        <h3>Vendas</h3>
+        <p>Valor Total: R$ <span id="total-vendas">0,00</span></p>
+        <p>Parcelas Pendentes: R$ <span id="total-pendentes">0,00</span></p>
+      </div>
+      <div class="form-group">
+        <h3>Exames</h3>
+        <p>Agendados: <span id="exames-agendados">0</span></p>
+        <p>Concluídos: <span id="exames-concluidos">0</span></p>
+      </div>
+    </div>
+  </div>
+
   <!-- Abas do Sistema -->
   <div class="tabs">
     <div class="tab active" onclick="abrirAba('cadastro')">Cadastro</div>
@@ -694,12 +762,12 @@
     <form id="cadastroForm" class="card">
       <div class="form-grid">
         <div class="form-group">
-          <label for="nome">Nome:</label>
+          <label for="nome" class="required-field">Nome:</label>
           <input id="nome" name="nome" required>
         </div>
         
         <div class="form-group">
-          <label for="cpf">CPF:</label>
+          <label for="cpf" class="required-field">CPF:</label>
           <input id="cpf" name="cpf" required oninput="formatarCPF(this)">
         </div>
         
@@ -874,7 +942,7 @@
         <input type="file" id="uploadExcel" accept=".xlsx" style="display: none;" onchange="carregarArquivoExcel(this)">
       </label>
       
-      <button onclick="gerarPDF()" id="btnGerarPDF" class="${bancoDados.clientes.length < 50 ? 'download-disabled' : ''}">
+      <button onclick="gerarPDF()" id="btnGerarPDF" class="download-disabled">
         <i class="fas fa-file-pdf"></i> Gerar PDF
       </button>
     </div>
@@ -892,14 +960,14 @@
     
     <div class="form-grid">
       <div class="form-group">
-        <label for="exameCliente">Cliente:</label>
+        <label for="exameCliente" class="required-field">Cliente:</label>
         <select id="exameCliente" required>
           <option value="">Selecione um cliente</option>
         </select>
       </div>
       
       <div class="form-group">
-        <label for="exameTipo">Tipo de Exame:</label>
+        <label for="exameTipo" class="required-field">Tipo de Exame:</label>
         <select id="exameTipo" required>
           <option value="">Selecione o tipo</option>
           <option value="Consulta Oftalmológica">Consulta Oftalmológica</option>
@@ -911,12 +979,12 @@
       </div>
       
       <div class="form-group">
-        <label for="exameData">Data do Exame:</label>
+        <label for="exameData" class="required-field">Data do Exame:</label>
         <input id="exameData" type="datetime-local" required>
       </div>
       
       <div class="form-group">
-        <label for="exameValor">Valor (R$):</label>
+        <label for="exameValor" class="required-field">Valor (R$):</label>
         <input id="exameValor" type="number" step="0.01" min="0" value="10.00" required>
       </div>
       
@@ -926,7 +994,7 @@
       </div>
       
       <div class="form-group">
-        <label>Status:</label>
+        <label class="required-field">Status:</label>
         <div style="display: flex; gap: 15px;">
           <label><input type="radio" name="exameStatus" value="Agendado" checked> Agendado</label>
           <label><input type="radio" name="exameStatus" value="Concluído"> Concluído</label>
@@ -1014,13 +1082,50 @@
   };
   let exameEditando = null;
 
-  // Carregar dados iniciais do localStorage
-  function carregarDadosIniciais() {
-    const dadosSalvos = localStorage.getItem('bancoDadosOtica');
-    if (dadosSalvos) {
-      bancoDados = JSON.parse(dadosSalvos);
-    }
-    atualizarBotaoPDF();
+  // Função de validação real de CPF
+  function validarCPF(cpf) {
+    cpf = cpf.replace(/\D/g, '');
+    if (cpf.length !== 11 || !!cpf.match(/(\d)\1{10}/)) return false;
+    
+    const calcDigit = (slice) => {
+      const sum = slice.split('').reduce((acc, curr, index) => 
+        acc + parseInt(curr) * (slice.length + 1 - index), 0);
+      const mod = 11 - (sum % 11);
+      return mod > 9 ? 0 : mod;
+    };
+    
+    const digit1 = calcDigit(cpf.slice(0, 9));
+    const digit2 = calcDigit(cpf.slice(0, 10));
+    return digit1 === parseInt(cpf[9]) && digit2 === parseInt(cpf[10]);
+  }
+
+  // Função de validação de telefone
+  function validarTelefone(telefone) {
+    const nums = telefone.replace(/\D/g, '');
+    // Valida DDD + 8 ou 9 dígitos (celular)
+    return nums.length === 11 || nums.length === 10;
+  }
+
+  // Atualizar dashboard de métricas
+  function atualizarDashboard() {
+    // Clientes
+    document.getElementById('total-clientes').textContent = bancoDados.clientes.length;
+    
+    // Vendas
+    const totalVendas = bancoDados.clientes.reduce((sum, c) => sum + parseFloat(c.total || 0), 0);
+    document.getElementById('total-vendas').textContent = totalVendas.toFixed(2);
+    
+    const pendentes = bancoDados.clientes.flatMap(c => 
+      c.parcelasDetalhes?.filter(p => p.status !== 'Paga').map(p => p.valor) || []
+    ).reduce((sum, v) => sum + v, 0);
+    document.getElementById('total-pendentes').textContent = pendentes.toFixed(2);
+    
+    // Exames
+    const exames = bancoDados.exames;
+    document.getElementById('exames-agendados').textContent = 
+      exames.filter(e => e.status === 'Agendado').length;
+    document.getElementById('exames-concluidos').textContent = 
+      exames.filter(e => e.status === 'Concluído').length;
   }
 
   // Atualizar estado do botão de gerar PDF
@@ -1034,30 +1139,54 @@
     }
   }
 
+  // Carregar dados iniciais do localStorage
+  function carregarDadosIniciais() {
+    const dadosSalvos = localStorage.getItem('bancoDadosOtica');
+    if (dadosSalvos) {
+      bancoDados = JSON.parse(dadosSalvos);
+    }
+    atualizarDashboard();
+    atualizarBotaoPDF();
+  }
+
   // Função para salvar dados no Excel e no localStorage
   function salvarBancoDados() {
-    // 1. Salvar no localStorage como fallback
-    localStorage.setItem('bancoDadosOtica', JSON.stringify(bancoDados));
-    
-    // 2. Criar arquivo Excel
-    const wb = XLSX.utils.book_new();
-    
-    // Planilha de Clientes
-    const wsClientes = XLSX.utils.json_to_sheet(bancoDados.clientes);
-    XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
-    
-    // Planilha de Exames
-    const wsExames = XLSX.utils.json_to_sheet(bancoDados.exames);
-    XLSX.utils.book_append_sheet(wb, wsExames, "Exames");
-    
-    // Gerar arquivo Excel
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    
-    // Forçar download do arquivo
-    saveAs(new Blob([wbout], { type: "application/octet-stream" }), "BancoDadosOtica.xlsx");
-    
-    mostrarToast('Banco de dados salvo com sucesso!', 'success');
-    atualizarBotaoPDF();
+    const btnSalvar = document.querySelector('button[onclick="salvarBancoDados()"]');
+    const originalText = btnSalvar.innerHTML;
+    btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+    btnSalvar.disabled = true;
+
+    setTimeout(() => {
+      try {
+        // 1. Salvar no localStorage como fallback
+        localStorage.setItem('bancoDadosOtica', JSON.stringify(bancoDados));
+        
+        // 2. Criar arquivo Excel
+        const wb = XLSX.utils.book_new();
+        
+        // Planilha de Clientes
+        const wsClientes = XLSX.utils.json_to_sheet(bancoDados.clientes);
+        XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
+        
+        // Planilha de Exames
+        const wsExames = XLSX.utils.json_to_sheet(bancoDados.exames);
+        XLSX.utils.book_append_sheet(wb, wsExames, "Exames");
+        
+        // Gerar arquivo Excel
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        
+        // Forçar download do arquivo
+        saveAs(new Blob([wbout], { type: "application/octet-stream" }), "BancoDadosOtica.xlsx");
+        
+        mostrarToast('Banco de dados salvo com sucesso!', 'success');
+        atualizarDashboard();
+      } catch (error) {
+        mostrarToast('Erro ao salvar: ' + error.message, 'error');
+      } finally {
+        btnSalvar.innerHTML = originalText;
+        btnSalvar.disabled = false;
+      }
+    }, 1000);
   }
 
   // Gerar PDF manualmente
@@ -1067,68 +1196,82 @@
       return;
     }
     
-    // Cria um novo documento PDF
-    const doc = new jsPDF();
-    
-    // Adiciona título
-    doc.setFontSize(18);
-    doc.setTextColor(0, 102, 204);
-    doc.text('Relatório de Clientes - Óticas Prismax', 105, 15, { align: 'center' });
-    
-    // Adiciona data e informação de gerado automaticamente
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
-    doc.text(`Total de clientes: ${bancoDados.clientes.length}`, 105, 28, { align: 'center' });
-    
-    // Adiciona linha
-    doc.setDrawColor(0, 102, 204);
-    doc.setLineWidth(0.5);
-    doc.line(20, 32, 190, 32);
-    
-    // Configurações da tabela
-    const columns = [
-      { header: 'Nome', dataKey: 'nome' },
-      { header: 'CPF', dataKey: 'cpf' },
-      { header: 'Telefone', dataKey: 'telefone' },
-      { header: 'Total (R$)', dataKey: 'total' },
-      { header: 'Data Entrega', dataKey: 'dataEntrega' }
-    ];
-    
-    const rows = bancoDados.clientes.map(cliente => ({
-      nome: cliente.nome || '-',
-      cpf: formatarCPFExibicao(cliente.cpf) || '-',
-      telefone: formatarTelefoneExibicao(cliente.telefone) || '-',
-      total: parseFloat(cliente.total || 0).toFixed(2),
-      dataEntrega: formatarDataExibicao(cliente.dataEntrega) || '-'
-    }));
-    
-    // Adiciona tabela
-    doc.autoTable({
-      head: [columns.map(col => col.header)],
-      body: rows.map(row => columns.map(col => row[col.dataKey])),
-      startY: 35,
-      styles: {
-        fontSize: 8,
-        cellPadding: 2,
-        overflow: 'linebreak'
-      },
-      headStyles: {
-        fillColor: [0, 102, 204],
-        textColor: 255,
-        fontStyle: 'bold'
-      },
-      alternateRowStyles: {
-        fillColor: [240, 240, 240]
-      },
-      margin: { top: 35 }
-    });
-    
-    // Salva o PDF
-    const dataAtual = new Date().toISOString().split('T')[0];
-    doc.save(`Clientes_OticaPrismax_${dataAtual}.pdf`);
-    
-    mostrarToast(`Relatório PDF gerado com sucesso!`, 'success');
+    const btnPDF = document.getElementById('btnGerarPDF');
+    const originalText = btnPDF.innerHTML;
+    btnPDF.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Gerando...';
+    btnPDF.disabled = true;
+
+    setTimeout(() => {
+      try {
+        // Cria um novo documento PDF
+        const doc = new jsPDF();
+        
+        // Adiciona título
+        doc.setFontSize(18);
+        doc.setTextColor(0, 102, 204);
+        doc.text('Relatório de Clientes - Óticas Prismax', 105, 15, { align: 'center' });
+        
+        // Adiciona data e informação de gerado automaticamente
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
+        doc.text(`Total de clientes: ${bancoDados.clientes.length}`, 105, 28, { align: 'center' });
+        
+        // Adiciona linha
+        doc.setDrawColor(0, 102, 204);
+        doc.setLineWidth(0.5);
+        doc.line(20, 32, 190, 32);
+        
+        // Configurações da tabela
+        const columns = [
+          { header: 'Nome', dataKey: 'nome' },
+          { header: 'CPF', dataKey: 'cpf' },
+          { header: 'Telefone', dataKey: 'telefone' },
+          { header: 'Total (R$)', dataKey: 'total' },
+          { header: 'Data Entrega', dataKey: 'dataEntrega' }
+        ];
+        
+        const rows = bancoDados.clientes.map(cliente => ({
+          nome: cliente.nome || '-',
+          cpf: formatarCPFExibicao(cliente.cpf) || '-',
+          telefone: formatarTelefoneExibicao(cliente.telefone) || '-',
+          total: parseFloat(cliente.total || 0).toFixed(2),
+          dataEntrega: formatarDataExibicao(cliente.dataEntrega) || '-'
+        }));
+        
+        // Adiciona tabela
+        doc.autoTable({
+          head: [columns.map(col => col.header)],
+          body: rows.map(row => columns.map(col => row[col.dataKey])),
+          startY: 35,
+          styles: {
+            fontSize: 8,
+            cellPadding: 2,
+            overflow: 'linebreak'
+          },
+          headStyles: {
+            fillColor: [0, 102, 204],
+            textColor: 255,
+            fontStyle: 'bold'
+          },
+          alternateRowStyles: {
+            fillColor: [240, 240, 240]
+          },
+          margin: { top: 35 }
+        });
+        
+        // Salva o PDF
+        const dataAtual = new Date().toISOString().split('T')[0];
+        doc.save(`Clientes_OticaPrismax_${dataAtual}.pdf`);
+        
+        mostrarToast(`Relatório PDF gerado com sucesso!`, 'success');
+      } catch (error) {
+        mostrarToast('Erro ao gerar PDF: ' + error.message, 'error');
+      } finally {
+        btnPDF.innerHTML = originalText;
+        btnPDF.disabled = false;
+      }
+    }, 1000);
   }
 
   // Inicialização
@@ -1191,6 +1334,8 @@
 
   // Remover parcela do formulário
   function removerParcela(btn) {
+    if (!confirm('Tem certeza que deseja remover esta parcela?')) return;
+    
     btn.parentElement.remove();
     // Renumerar as parcelas restantes
     const parcelas = listaParcelasForm.querySelectorAll('.parcela-item');
@@ -1211,8 +1356,19 @@
       return;
     }
     
+    if (!validarCPF(dados.cpf)) {
+      mostrarToast('CPF inválido! Verifique o número.', 'error');
+      return;
+    }
+    
+    if (dados.whatsapp && !validarTelefone(dados.whatsapp)) {
+      mostrarToast('WhatsApp inválido! Formato: (DD) 9XXXX-XXXX', 'error');
+      return;
+    }
+    
     // Verificar se CPF já existe
-    if (bancoDados.clientes.some(c => c.cpf === dados.cpf)) {
+    const cpfExistente = bancoDados.clientes.some(c => c.cpf === dados.cpf);
+    if (cpfExistente && clienteIndexAtual === null) {
       mostrarToast('Já existe um cliente com este CPF!', 'error');
       return;
     }
@@ -1221,9 +1377,19 @@
     dados.parcelasDetalhes = [];
     const parcelas = listaParcelasForm.querySelectorAll('.parcela-item');
     
+    if (parcelas.length === 0) {
+      mostrarToast('Adicione pelo menos uma parcela!', 'error');
+      return;
+    }
+    
     parcelas.forEach((parcela, index) => {
       const inputs = parcela.querySelectorAll('input');
       const select = parcela.querySelector('select');
+      
+      if (!inputs[0].value || !inputs[1].value) {
+        mostrarToast(`Preencha todos os campos da parcela ${index + 1}!`, 'error');
+        return;
+      }
       
       dados.parcelasDetalhes.push({
         numero: index + 1,
@@ -1239,13 +1405,18 @@
     const totalParcelas = dados.parcelasDetalhes.reduce((sum, p) => sum + p.valor, 0);
     dados.total = (entrada + totalParcelas).toFixed(2);
 
-    // Adicionar cliente ao banco de dados
-    bancoDados.clientes.push(dados);
+    // Adicionar/atualizar cliente no banco de dados
+    if (clienteIndexAtual !== null) {
+      bancoDados.clientes[clienteIndexAtual] = dados;
+      clienteIndexAtual = null;
+    } else {
+      bancoDados.clientes.push(dados);
+    }
     
     // Salvar no Excel e localStorage
     salvarBancoDados();
     
-    mostrarToast('Cliente salvo no banco de dados!', 'success');
+    mostrarToast(clienteIndexAtual !== null ? 'Cliente atualizado!' : 'Cliente cadastrado!', 'success');
     form.reset();
     listaParcelasForm.innerHTML = ''; // Limpar parcelas
     carregarTabela();
@@ -1507,22 +1678,28 @@
   // Fechar detalhes das parcelas
   function fecharDetalhes() {
     detalhes.style.display = 'none';
+    clienteIndexAtual = null;
   }
 
   // Excluir cliente
   function excluirCliente(index) {
-    if (confirm("Tem certeza que deseja excluir este cliente e todas as suas parcelas?")) {
-      bancoDados.clientes.splice(index, 1);
-      salvarBancoDados();
-      mostrarToast('Cliente excluído com sucesso!', 'success');
-      carregarTabela();
-      carregarCompras();
+    const cliente = bancoDados.clientes[index];
+    if (!confirm(`Tem certeza que deseja excluir ${cliente.nome}?\nEsta ação removerá todos os dados do cliente e não pode ser desfeita!`)) {
+      return;
     }
+    
+    bancoDados.clientes.splice(index, 1);
+    salvarBancoDados();
+    mostrarToast('Cliente excluído com sucesso!', 'success');
+    carregarTabela();
+    carregarCompras();
   }
 
   // Editar cliente
   function editarCliente(index) {
     const cliente = bancoDados.clientes[index];
+    clienteIndexAtual = index;
+    
     for (const key in cliente) {
       if (form.elements[key]) {
         form.elements[key].value = cliente[key] || '';
@@ -1542,8 +1719,6 @@
       });
     }
     
-    bancoDados.clientes.splice(index, 1);
-    salvarBancoDados();
     mostrarToast('Preencha os dados para edição', 'info');
     window.scrollTo({ top: form.offsetTop, behavior: 'smooth' });
   }
@@ -1696,44 +1871,57 @@
 
   // Excluir exame
   function excluirExame(index) {
-    if (confirm("Tem certeza que deseja excluir este exame?")) {
-      bancoDados.exames.splice(index, 1);
-      salvarBancoDados();
-      mostrarToast('Exame excluído com sucesso!', 'success');
-      carregarExames();
-    }
+    const exame = bancoDados.exames[index];
+    const cliente = bancoDados.clientes.find(c => c.cpf === exame.cpfCliente) || {};
+    const msg = `Exame: ${exame.tipo}\nCliente: ${cliente.nome || exame.cpfCliente}\nData: ${exame.data}\n\nConfirmar exclusão?`;
+    
+    if (!confirm(msg)) return;
+    
+    bancoDados.exames.splice(index, 1);
+    salvarBancoDados();
+    mostrarToast('Exame excluído com sucesso!', 'success');
+    carregarExames();
   }
 
   // Buscar CEP via API ViaCEP
   function buscarCEP() {
-    const cep = document.getElementById('cep').value.replace(/\D/g, '');
+    const cepInput = document.getElementById('cep');
+    const cep = cepInput.value.replace(/\D/g, '');
     
     if (cep.length !== 8) {
       mostrarToast('CEP inválido! Deve conter 8 dígitos.', 'error');
+      cepInput.focus();
       return;
     }
+
+    // Adicione um loading state
+    cepInput.disabled = true;
+    const btnBuscar = document.querySelector('.cep-search button');
+    btnBuscar.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     
     fetch(`https://viacep.com.br/ws/${cep}/json/`)
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) throw new Error('Erro na rede');
+        return response.json();
+      })
       .then(data => {
-        if (data.erro) {
-          mostrarToast('CEP não encontrado!', 'error');
-          return;
-        }
+        if (data.erro) throw new Error('CEP não encontrado');
         
         document.getElementById('rua').value = data.logradouro || '';
         document.getElementById('bairro').value = data.bairro || '';
         document.getElementById('cidade').value = data.localidade || '';
         document.getElementById('uf').value = data.uf || '';
-        
-        // Focar no campo número após preencher o endereço
         document.getElementById('numero').focus();
         
         mostrarToast('Endereço preenchido automaticamente!', 'success');
       })
       .catch(error => {
-        console.error('Erro ao buscar CEP:', error);
-        mostrarToast('Erro ao buscar CEP. Tente novamente.', 'error');
+        console.error('Erro:', error);
+        mostrarToast(error.message || 'Erro ao buscar CEP. Tente novamente.', 'error');
+      })
+      .finally(() => {
+        cepInput.disabled = false;
+        btnBuscar.innerHTML = '<i class="fas fa-search"></i>';
       });
   }
 
@@ -1741,6 +1929,11 @@
   function carregarArquivoExcel(input) {
     const file = input.files[0];
     if (!file) return;
+
+    const btnCarregar = input.previousElementSibling;
+    const originalText = btnCarregar.innerHTML;
+    btnCarregar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Carregando...';
+    btnCarregar.disabled = true;
 
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -1772,6 +1965,10 @@
       } catch (error) {
         console.error("Erro ao processar arquivo Excel:", error);
         mostrarToast('Erro ao importar arquivo. Verifique o formato.', 'error');
+      } finally {
+        btnCarregar.innerHTML = originalText;
+        btnCarregar.disabled = false;
+        input.value = '';
       }
     };
     reader.readAsArrayBuffer(file);
